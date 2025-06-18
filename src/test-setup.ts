@@ -30,3 +30,17 @@ Object.defineProperty(window, 'matchMedia', {
     dispatchEvent: vi.fn(),
   })),
 });
+
+// Mock HTMLCanvasElement.getContext
+HTMLCanvasElement.prototype.getContext = vi.fn();
+
+// Mock URL.createObjectURL
+global.URL.createObjectURL = vi.fn(() => 'mocked-url');
+global.URL.revokeObjectURL = vi.fn();
+
+// Mock FileReader
+global.FileReader = vi.fn().mockImplementation(() => ({
+  readAsDataURL: vi.fn(),
+  result: 'data:image/jpeg;base64,mockbase64data',
+  onload: null,
+}));
