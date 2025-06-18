@@ -1,73 +1,145 @@
-# Welcome to your Lovable project
 
-## Project info
+# Ollama AI Chat Interface
 
-**URL**: https://lovable.dev/projects/293418f5-134a-4437-ba84-30cdcba9298a
+A modern, responsive AI chat interface for local Ollama models with dynamic capability detection and intelligent feature adaptation.
 
-## How can I edit this code?
+## 🚀 Features
 
-There are several ways of editing your application.
+- **Dynamic Model Detection**: Automatically detects available Ollama models and their capabilities
+- **Vision Support**: Enables image upload for vision-capable models (like LLaVA)
+- **Tool Integration**: Shows tool options for models that support function calling
+- **Streaming Responses**: Real-time streaming chat responses
+- **Simulation Mode**: Falls back to mock responses when Ollama is not available (perfect for testing)
+- **Responsive Design**: Modern UI built with Tailwind CSS and shadcn/ui components
+- **Comprehensive Testing**: Full test suite with Vitest and React Testing Library
 
-**Use Lovable**
+## 🛠️ Technologies Used
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/293418f5-134a-4437-ba84-30cdcba9298a) and start prompting.
+- **Frontend**: React 18, TypeScript, Vite
+- **UI Components**: shadcn/ui, Tailwind CSS
+- **State Management**: @tanstack/react-query
+- **Testing**: Vitest, React Testing Library, jsdom
+- **Icons**: Lucide React
+- **Routing**: React Router DOM
 
-Changes made via Lovable will be committed automatically to this repo.
+## 📋 Prerequisites
 
-**Use your preferred IDE**
+- Node.js (v18 or higher)
+- npm or yarn
+- [Ollama](https://ollama.ai/) installed locally (optional - app works in simulation mode without it)
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+## 🚀 Quick Start
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+1. **Clone the repository**
+   ```bash
+   git clone <your-repo-url>
+   cd ollama-chat-interface
+   ```
 
-Follow these steps:
+2. **Install dependencies**
+   ```bash
+   npm install
+   ```
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+3. **Start the development server**
+   ```bash
+   npm run dev
+   ```
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+4. **Open your browser**
+   Navigate to `http://localhost:5173`
 
-# Step 3: Install the necessary dependencies.
-npm i
+## 🧪 Testing
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+Run the test suite:
+
+```bash
+# Run tests in watch mode
+npm test
+
+# Run tests with UI
+npm run test:ui
+
+# Run tests with coverage report
+npm run test:coverage
 ```
 
-**Edit a file directly in GitHub**
+## 🔧 Configuration
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+### With Ollama
 
-**Use GitHub Codespaces**
+Make sure Ollama is running on your local machine:
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+```bash
+ollama serve
+```
 
-## What technologies are used for this project?
+The app will automatically detect your available models and their capabilities.
 
-This project is built with:
+### Without Ollama (Simulation Mode)
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+The app automatically falls back to simulation mode when Ollama is not detected. This includes:
 
-## How can I deploy this project?
+- Mock models with different capabilities (vision, tools)
+- Simulated streaming responses
+- All UI features remain functional for testing
 
-Simply open [Lovable](https://lovable.dev/projects/293418f5-134a-4437-ba84-30cdcba9298a) and click on Share -> Publish.
+## 🎯 Model Capabilities
 
-## Can I connect a custom domain to my Lovable project?
+The interface automatically adapts based on model capabilities:
 
-Yes, you can!
+- **Vision Models** (e.g., LLaVA): Shows image upload button
+- **Tool-capable Models**: Displays tools configuration options
+- **Standard Models**: Basic chat interface
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+## 📁 Project Structure
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+```
+src/
+├── components/
+│   ├── ChatInterface.tsx      # Main chat component
+│   ├── ui/                    # shadcn/ui components
+│   └── __tests__/            # Component tests
+├── utils/
+│   └── ollamaSimulator.ts    # Mock data and simulation logic
+├── pages/
+│   ├── Index.tsx             # Home page
+│   └── NotFound.tsx          # 404 page
+└── hooks/                    # Custom React hooks
+```
+
+## 🤝 Contributing
+
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🆘 Support
+
+If you encounter any issues or have questions:
+
+1. Check the [Issues](../../issues) page
+2. Create a new issue with detailed information
+3. Join our community discussions
+
+## 🔮 Roadmap
+
+- [ ] Support for more Ollama model families
+- [ ] Custom model configuration
+- [ ] Chat history persistence
+- [ ] Export chat conversations
+- [ ] Plugin system for custom tools
+- [ ] Multi-language support
+
+## ⭐ Acknowledgments
+
+- [Ollama](https://ollama.ai/) for the amazing local AI model runtime
+- [shadcn/ui](https://ui.shadcn.com/) for beautiful UI components
+- [Tailwind CSS](https://tailwindcss.com/) for utility-first CSS
+- [Vite](https://vitejs.dev/) for blazing fast development
+
+---
+
+Made with ❤️ for the local AI community
