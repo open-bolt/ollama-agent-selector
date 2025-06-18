@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
+import { mockModels, generateMockResponse, simulateStreamingResponse } from '@/utils/ollamaSimulator';
 
 interface OllamaModel {
   name: string;
@@ -51,6 +52,7 @@ const ChatInterface = () => {
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
+  const [isSimulationMode, setIsSimulationMode] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [toolsEnabled, setToolsEnabled] = useState(false);
   const [streamingEnabled, setStreamingEnabled] = useState(true);
@@ -75,6 +77,7 @@ const ChatInterface = () => {
         const data = await response.json();
         setModels(data.models || []);
         setIsConnected(true);
+        setIsSimulationMode(false);
         toast({
           title: "Connected to Ollama",
           description: `Found ${data.models?.length || 0} models`,
@@ -82,10 +85,12 @@ const ChatInterface = () => {
       }
     } catch (error) {
       setIsConnected(false);
+      setIsSimulationMode(true);
+      setModels(mockModels);
       toast({
-        title: "Connection Failed",
-        description: "Cannot connect to Ollama. Make sure it's running on localhost:11434",
-        variant: "destructive",
+        title: "Simulation Mode",
+        description: "Using mock models for testing. Install Ollama to connect to real models.",
+        variant: "default",
       });
     }
   };
@@ -159,45 +164,8 @@ const ChatInterface = () => {
     setIsLoading(true);
 
     try {
-      const requestBody: any = {
-        model: selectedModel,
-        messages: [
-          ...messages.map(msg => ({
-            role: msg.role,
-            content: msg.content,
-            ...(msg.image && { images: [msg.image.split(',')[1]] })
-          })),
-          {
-            role: 'user',
-            content: inputMessage,
-            ...(selectedImage && { images: [selectedImage.split(',')[1]] })
-          }
-        ],
-        stream: streamingEnabled,
-        options: {
-          temperature: 0.7,
-          ...(toolsEnabled && { tools: true })
-        }
-      };
-
-      const response = await fetch('http://localhost:11434/api/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestBody)
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      let assistantMessage = '';
-
-      if (streamingEnabled) {
-        const reader = response.body?.getReader();
-        const decoder = new TextDecoder();
-        
+      if (isSimulationMode) {
+        // Simulate response
         const assistantMessageObj: ChatMessage = {
           role: 'assistant',
           content: '',
@@ -206,42 +174,119 @@ const ChatInterface = () => {
         
         setMessages(prev => [...prev, assistantMessageObj]);
 
-        while (reader) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          const chunk = decoder.decode(value);
-          const lines = chunk.split('\n').filter(line => line.trim());
-          
-          for (const line of lines) {
-            try {
-              const data = JSON.parse(line);
-              if (data.message?.content) {
-                assistantMessage += data.message.content;
-                setMessages(prev => 
-                  prev.map((msg, idx) => 
-                    idx === prev.length - 1 
-                      ? { ...msg, content: assistantMessage }
-                      : msg
-                  )
-                );
-              }
-            } catch (e) {
-              // Skip invalid JSON lines
-            }
-          }
+        if (streamingEnabled) {
+          let assistantMessage = '';
+          await simulateStreamingResponse(
+            inputMessage,
+            selectedModel,
+            (chunk) => {
+              assistantMessage += chunk;
+              setMessages(prev => 
+                prev.map((msg, idx) => 
+                  idx === prev.length - 1 
+                    ? { ...msg, content: assistantMessage }
+                    : msg
+                )
+              );
+            },
+            50
+          );
+        } else {
+          const response = generateMockResponse(inputMessage, selectedModel);
+          setMessages(prev => 
+            prev.map((msg, idx) => 
+              idx === prev.length - 1 
+                ? { ...msg, content: response }
+                : msg
+            )
+          );
         }
       } else {
-        const data = await response.json();
-        assistantMessage = data.message?.content || 'No response';
-        
-        const assistantMessageObj: ChatMessage = {
-          role: 'assistant',
-          content: assistantMessage,
-          timestamp: new Date()
+        // Real Ollama request
+        const requestBody: any = {
+          model: selectedModel,
+          messages: [
+            ...messages.map(msg => ({
+              role: msg.role,
+              content: msg.content,
+              ...(msg.image && { images: [msg.image.split(',')[1]] })
+            })),
+            {
+              role: 'user',
+              content: inputMessage,
+              ...(selectedImage && { images: [selectedImage.split(',')[1]] })
+            }
+          ],
+          stream: streamingEnabled,
+          options: {
+            temperature: 0.7,
+            ...(toolsEnabled && { tools: true })
+          }
         };
-        
-        setMessages(prev => [...prev, assistantMessageObj]);
+
+        const response = await fetch('http://localhost:11434/api/chat', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(requestBody)
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        let assistantMessage = '';
+
+        if (streamingEnabled) {
+          const reader = response.body?.getReader();
+          const decoder = new TextDecoder();
+          
+          const assistantMessageObj: ChatMessage = {
+            role: 'assistant',
+            content: '',
+            timestamp: new Date()
+          };
+          
+          setMessages(prev => [...prev, assistantMessageObj]);
+
+          while (reader) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            const chunk = decoder.decode(value);
+            const lines = chunk.split('\n').filter(line => line.trim());
+            
+            for (const line of lines) {
+              try {
+                const data = JSON.parse(line);
+                if (data.message?.content) {
+                  assistantMessage += data.message.content;
+                  setMessages(prev => 
+                    prev.map((msg, idx) => 
+                      idx === prev.length - 1 
+                        ? { ...msg, content: assistantMessage }
+                        : msg
+                    )
+                  );
+                }
+              } catch (e) {
+                // Skip invalid JSON lines
+              }
+            }
+          }
+        } else {
+          const data = await response.json();
+          assistantMessage = data.message?.content || 'No response';
+          
+          const assistantMessageObj: ChatMessage = {
+            role: 'assistant',
+            content: assistantMessage,
+            timestamp: new Date()
+          };
+          
+          setMessages(prev => [...prev, assistantMessageObj]);
+        }
       }
 
       setSelectedImage(null);
@@ -253,7 +298,7 @@ const ChatInterface = () => {
       console.error('Error sending message:', error);
       toast({
         title: "Error",
-        description: "Failed to send message. Check your Ollama connection.",
+        description: isSimulationMode ? "Simulation error occurred" : "Failed to send message. Check your Ollama connection.",
         variant: "destructive",
       });
     } finally {
@@ -279,6 +324,10 @@ const ChatInterface = () => {
             {isConnected ? (
               <Badge variant="secondary" className="bg-green-100 text-green-800">
                 Connected
+              </Badge>
+            ) : isSimulationMode ? (
+              <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">
+                Simulation Mode
               </Badge>
             ) : (
               <Badge variant="destructive">Disconnected</Badge>
@@ -377,7 +426,7 @@ const ChatInterface = () => {
             {messages.length === 0 ? (
               <div className="text-center text-muted-foreground py-8">
                 <Bot className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                <p>Start a conversation with your Ollama model!</p>
+                <p>Start a conversation with your {isSimulationMode ? 'simulated' : 'Ollama'} model!</p>
                 {capabilities.vision && (
                   <p className="text-sm mt-2">This model supports image uploads 📸</p>
                 )}
@@ -435,7 +484,7 @@ const ChatInterface = () => {
                 <div className="bg-gray-100 rounded-lg p-3">
                   <div className="flex items-center gap-2">
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Thinking...</span>
+                    <span>{isSimulationMode ? 'Simulating...' : 'Thinking...'}</span>
                   </div>
                 </div>
               </div>
@@ -445,7 +494,7 @@ const ChatInterface = () => {
 
           {/* Input Area */}
           <div className="border-t p-4">
-            {!isConnected && (
+            {!isConnected && !isSimulationMode && (
               <Alert className="mb-4">
                 <AlertDescription>
                   Not connected to Ollama. Make sure Ollama is running on localhost:11434
@@ -453,7 +502,15 @@ const ChatInterface = () => {
               </Alert>
             )}
             
-            {!selectedModel && isConnected && (
+            {isSimulationMode && (
+              <Alert className="mb-4">
+                <AlertDescription>
+                  Running in simulation mode with mock models. Install and run Ollama to use real models.
+                </AlertDescription>
+              </Alert>
+            )}
+            
+            {!selectedModel && (isConnected || isSimulationMode) && (
               <Alert className="mb-4">
                 <AlertDescription>
                   Please select a model to start chatting
@@ -490,7 +547,7 @@ const ChatInterface = () => {
                       ? "Type your message..."
                       : "Select a model first..."
                   }
-                  disabled={!selectedModel || !isConnected}
+                  disabled={!selectedModel || (!isConnected && !isSimulationMode)}
                   className="min-h-[60px] resize-none"
                 />
               </div>
@@ -508,7 +565,7 @@ const ChatInterface = () => {
                       onClick={() => fileInputRef.current?.click()}
                       variant="outline"
                       size="icon"
-                      disabled={!selectedModel || !isConnected}
+                      disabled={!selectedModel || (!isConnected && !isSimulationMode)}
                     >
                       <Image className="w-4 h-4" />
                     </Button>
@@ -516,7 +573,7 @@ const ChatInterface = () => {
                 )}
                 <Button
                   onClick={sendMessage}
-                  disabled={!inputMessage.trim() || !selectedModel || !isConnected || isLoading}
+                  disabled={!inputMessage.trim() || !selectedModel || (!isConnected && !isSimulationMode) || isLoading}
                   size="icon"
                 >
                   <Send className="w-4 h-4" />
