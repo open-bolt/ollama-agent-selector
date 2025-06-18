@@ -1,4 +1,3 @@
-
 import '@testing-library/jest-dom';
 import { vi } from 'vitest';
 
@@ -38,8 +37,8 @@ HTMLCanvasElement.prototype.getContext = vi.fn();
 global.URL.createObjectURL = vi.fn(() => 'mocked-url');
 global.URL.revokeObjectURL = vi.fn();
 
-// Mock FileReader with all required properties
-const mockFileReader = vi.fn().mockImplementation(() => ({
+// Mock FileReader with proper typing
+const mockFileReaderConstructor = vi.fn().mockImplementation(() => ({
   readAsDataURL: vi.fn(),
   result: 'data:image/jpeg;base64,mockbase64data',
   onload: null,
@@ -56,10 +55,10 @@ const mockFileReader = vi.fn().mockImplementation(() => ({
   readAsBinaryString: vi.fn(),
 }));
 
-// Add static properties to match FileReader interface
-mockFileReader.EMPTY = 0;
-mockFileReader.LOADING = 1;
-mockFileReader.DONE = 2;
-mockFileReader.prototype = {};
+// Add static properties directly to the constructor function
+(mockFileReaderConstructor as any).EMPTY = 0;
+(mockFileReaderConstructor as any).LOADING = 1;
+(mockFileReaderConstructor as any).DONE = 2;
+(mockFileReaderConstructor as any).prototype = {};
 
-global.FileReader = mockFileReader as any;
+global.FileReader = mockFileReaderConstructor as any;
