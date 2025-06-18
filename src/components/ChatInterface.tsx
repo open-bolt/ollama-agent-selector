@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Send, Image, Settings, Bot, User, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -12,6 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { mockModels, generateMockResponse, simulateStreamingResponse } from '@/utils/ollamaSimulator';
+import { ollamaTools, executeOllamaTool } from '@/utils/ollamaTools';
+import ToolsPanel from './ToolsPanel';
 
 interface OllamaModel {
   name: string;
@@ -56,6 +57,7 @@ const ChatInterface = () => {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [toolsEnabled, setToolsEnabled] = useState(false);
   const [streamingEnabled, setStreamingEnabled] = useState(true);
+  const [showTools, setShowTools] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
@@ -105,14 +107,16 @@ const ChatInterface = () => {
                      name.includes('moondream') ||
                      name.includes('minicpm-v');
 
-    // Tool-capable models detection
+    // Tool-capable models detection - expanded list
     const hasTools = name.includes('functionary') ||
                     name.includes('hermes') ||
                     name.includes('mistral') ||
                     name.includes('mixtral') ||
                     name.includes('codellama') ||
                     name.includes('llama3') ||
-                    name.includes('qwen');
+                    name.includes('qwen') ||
+                    name.includes('phi') ||
+                    name.includes('gemma');
 
     return {
       vision: hasVision,
@@ -127,6 +131,7 @@ const ChatInterface = () => {
     const caps = detectModelCapabilities(modelName);
     setCapabilities(caps);
     setToolsEnabled(caps.tools);
+    setShowTools(caps.tools);
     setMessages([]);
     setSelectedImage(null);
   };
@@ -149,6 +154,23 @@ const ChatInterface = () => {
     }
   };
 
+  const handleToolCall = async (toolName: string, parameters: any) => {
+    console.log(`Tool called: ${toolName}`, parameters);
+    
+    const toolResult = await executeOllamaTool(toolName, parameters);
+    
+    // Add tool result as a system message for context
+    const toolMessage: ChatMessage = {
+      role: 'assistant',
+      content: `**Tool Result: ${toolName}**\n\n${toolResult.error || toolResult.result}`,
+      timestamp: new Date()
+    };
+    
+    setMessages(prev => [...prev, toolMessage]);
+    
+    return toolResult;
+  };
+
   const sendMessage = async () => {
     if (!inputMessage.trim() || !selectedModel || isLoading) return;
 
@@ -165,7 +187,7 @@ const ChatInterface = () => {
 
     try {
       if (isSimulationMode) {
-        // Simulate response
+        // Enhanced simulation with tool support
         const assistantMessageObj: ChatMessage = {
           role: 'assistant',
           content: '',
@@ -174,35 +196,68 @@ const ChatInterface = () => {
         
         setMessages(prev => [...prev, assistantMessageObj]);
 
-        if (streamingEnabled) {
-          let assistantMessage = '';
-          await simulateStreamingResponse(
-            inputMessage,
-            selectedModel,
-            (chunk) => {
-              assistantMessage += chunk;
-              setMessages(prev => 
-                prev.map((msg, idx) => 
-                  idx === prev.length - 1 
-                    ? { ...msg, content: assistantMessage }
-                    : msg
-                )
-              );
-            },
-            50
-          );
+        // Check if the message might trigger a tool call
+        let finalResponse = '';
+        
+        if (toolsEnabled && (
+          inputMessage.toLowerCase().includes('read file') ||
+          inputMessage.toLowerCase().includes('list directory') ||
+          inputMessage.toLowerCase().includes('search for') ||
+          inputMessage.toLowerCase().includes('what time') ||
+          inputMessage.toLowerCase().includes('what date') ||
+          inputMessage.toLowerCase().includes('who are you') ||
+          inputMessage.toLowerCase().includes('your name')
+        )) {
+          // Simulate tool usage
+          if (inputMessage.toLowerCase().includes('read file')) {
+            const toolResult = await handleToolCall('read_file', { path: 'README.md' });
+            finalResponse = `I'll read that file for you.\n\n${toolResult.result}`;
+          } else if (inputMessage.toLowerCase().includes('list directory') || inputMessage.toLowerCase().includes('show files')) {
+            const toolResult = await handleToolCall('read_directory', { path: '.' });
+            finalResponse = `Here are the files and directories:\n\n${toolResult.result}`;
+          } else if (inputMessage.toLowerCase().includes('search for')) {
+            const toolResult = await handleToolCall('search_files', { query: 'md' });
+            finalResponse = `Here are the search results:\n\n${toolResult.result}`;
+          } else if (inputMessage.toLowerCase().includes('what time')) {
+            const toolResult = await handleToolCall('get_current_time', { format: '12h' });
+            finalResponse = toolResult.result;
+          } else if (inputMessage.toLowerCase().includes('what date')) {
+            const toolResult = await handleToolCall('get_current_date', { format: 'relative' });
+            finalResponse = toolResult.result;
+          } else if (inputMessage.toLowerCase().includes('who are you') || inputMessage.toLowerCase().includes('your name')) {
+            const toolResult = await handleToolCall('get_agent_info', {});
+            finalResponse = `Let me tell you about myself:\n\n${toolResult.result}`;
+          }
         } else {
-          const response = generateMockResponse(inputMessage, selectedModel);
+          finalResponse = generateMockResponse(inputMessage, selectedModel);
+        }
+
+        if (streamingEnabled) {
+          let streamedMessage = '';
+          const words = finalResponse.split(' ');
+          
+          for (let i = 0; i < words.length; i++) {
+            await new Promise(resolve => setTimeout(resolve, 50));
+            streamedMessage += words[i] + (i < words.length - 1 ? ' ' : '');
+            setMessages(prev => 
+              prev.map((msg, idx) => 
+                idx === prev.length - 1 
+                  ? { ...msg, content: streamedMessage }
+                  : msg
+              )
+            );
+          }
+        } else {
           setMessages(prev => 
             prev.map((msg, idx) => 
               idx === prev.length - 1 
-                ? { ...msg, content: response }
+                ? { ...msg, content: finalResponse }
                 : msg
             )
           );
         }
       } else {
-        // Real Ollama request
+        // Real Ollama request with tools
         const requestBody: any = {
           model: selectedModel,
           messages: [
@@ -219,10 +274,14 @@ const ChatInterface = () => {
           ],
           stream: streamingEnabled,
           options: {
-            temperature: 0.7,
-            ...(toolsEnabled && { tools: true })
+            temperature: 0.7
           }
         };
+
+        // Add tools if enabled
+        if (toolsEnabled && capabilities.tools) {
+          requestBody.tools = ollamaTools;
+        }
 
         const response = await fetch('http://localhost:11434/api/chat', {
           method: 'POST',
@@ -260,6 +319,14 @@ const ChatInterface = () => {
             for (const line of lines) {
               try {
                 const data = JSON.parse(line);
+                
+                // Handle tool calls
+                if (data.message?.tool_calls) {
+                  for (const toolCall of data.message.tool_calls) {
+                    await handleToolCall(toolCall.function.name, toolCall.function.arguments);
+                  }
+                }
+                
                 if (data.message?.content) {
                   assistantMessage += data.message.content;
                   setMessages(prev => 
@@ -277,6 +344,14 @@ const ChatInterface = () => {
           }
         } else {
           const data = await response.json();
+          
+          // Handle tool calls in non-streaming mode
+          if (data.message?.tool_calls) {
+            for (const toolCall of data.message.tool_calls) {
+              await handleToolCall(toolCall.function.name, toolCall.function.arguments);
+            }
+          }
+          
           assistantMessage = data.message?.content || 'No response';
           
           const assistantMessageObj: ChatMessage = {
@@ -413,11 +488,24 @@ const ChatInterface = () => {
                   />
                   <Label htmlFor="streaming">Streaming</Label>
                 </div>
+                {capabilities.tools && (
+                  <div className="flex items-center space-x-2">
+                    <Switch
+                      id="show-tools"
+                      checked={showTools}
+                      onCheckedChange={setShowTools}
+                    />
+                    <Label htmlFor="show-tools">Show Tools</Label>
+                  </div>
+                )}
               </div>
             </div>
           )}
         </CardContent>
       </Card>
+
+      {/* Tools Panel */}
+      <ToolsPanel isVisible={showTools && capabilities.tools} selectedModel={selectedModel} />
 
       {/* Chat Messages */}
       <Card className="flex-1 flex flex-col">
